@@ -1,0 +1,18 @@
+# 🚫 Archivos de configuración privada
+.env
+
+# 🚫 Archivos de sesión / cookies de Instagram
+*.json
+
+# 🚫 Archivos temporales / caché
+__pycache__/
+*.pyc
+*.pyo
+
+# 🚫 Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# 🚫 Archivos de entorno virtual
+.venv/
+venv/
