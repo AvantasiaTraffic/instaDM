@@ -140,7 +140,7 @@ if st.session_state["cl"]:
                     progress_text.text(f"Procesando usuario {i + 1}/{total}...")
 
                     # 💤 Espera aleatoria para no parecer bot
-                    time.sleep(random.uniform(1.5, 3.5))
+                    time.sleep(random.uniform(3.5, 5.5))
 
                 progress_bar.progress(100)
                 progress_text.text("✅ Lote completado")
@@ -164,7 +164,7 @@ if st.session_state["cl"]:
                     st.warning("🔐 Conecta a Instagram de nuevo para confirmar tu identidad. "
                                "Abre tu aplicación de Instagram, aprueba el acceso, y vuelve aquí para continuar.")
                     st.session_state["cl"] = None
-                    time.sleep(2)
+                    time.sleep(3)
                     st.rerun()  # 🔁 Vuelve a dibujar la app mostrando el botón de inicio
                 # 🚨 Caso 2: otros errores normales
                 else:
@@ -216,7 +216,7 @@ if st.session_state["cl"]:
                             })
 
                             progress.progress(int((i + 1) / total * 100))
-                            time.sleep(random.uniform(1, 2))
+                            time.sleep(random.uniform(3, 5))
                         except Exception as e:
                             st.write(f"⚠️ Error generando mensaje para {username}: {e}")
 
@@ -265,7 +265,7 @@ if st.session_state["cl"]:
                                     "Abre la app oficial, aprueba el acceso, y vuelve aquí para continuar."
                                 )
                                 st.session_state["cl"] = None
-                                time.sleep(2)
+                                time.sleep(3)
                                 st.rerun()
                                 continue
                             else:
@@ -280,7 +280,7 @@ if st.session_state["cl"]:
                                     "Abre tu aplicación de Instagram, aprueba el acceso, y vuelve aquí para continuar."
                                 )
                                 st.session_state["cl"] = None
-                                time.sleep(2)
+                                time.sleep(3)
                                 st.rerun()
                                 continue
                             st.write(f"⚠️ Error inesperado con {username}: {e}")
@@ -288,7 +288,7 @@ if st.session_state["cl"]:
 
                         # 📊 Actualiza la barra de progreso
                         progress.progress(int((i + 1) / total * 100))
-                        time.sleep(random.uniform(4, 7))
+                        time.sleep(random.uniform(6, 9))
 
                     st.success(f"📨 Se enviaron {sent} mensajes correctamente.")
                     st.session_state.pop("generated_messages", None)

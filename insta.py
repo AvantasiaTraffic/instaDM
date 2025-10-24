@@ -62,7 +62,7 @@ def login(username, password):
                 os.remove(session_path)
             except:
                 pass
-            time.sleep(2)
+            time.sleep(3)
 
     # ------------------------------
     # 3️⃣ Login limpio (con device fijo)
@@ -147,7 +147,7 @@ def ensure_login(client, username, password):
                     print(f"🗑️ Sesión anterior eliminada: {session_path}")
                 except:
                     pass
-            time.sleep(2)
+            time.sleep(3)
             new_client = login(username, password)
             return new_client
         else:
@@ -252,7 +252,7 @@ def get_likers(client, media_pk, batch_size=10, offset=0):
                 print(f"⚠️ Error con usuario {u.username}: {e}")
                 continue
 
-        time.sleep(random.uniform(2, 4))
+        time.sleep(random.uniform(5, 8))
 
     has_more = offset + batch_size < len(likers)
     return {
