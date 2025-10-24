@@ -1,5 +1,6 @@
 from instagrapi import Client
 from langdetect import detect, DetectorFactory
+import random
 import os, re, time, json, uuid
 
 DetectorFactory.seed = 0
@@ -21,18 +22,20 @@ def cookies_file(username):
 # ------------------------------
 def login(username, password):
     """
-    Inicia sesión con prioridad:
+    Login persistente con prioridad:
     1️⃣ Cookies del navegador (si existen)
     2️⃣ Sesión JSON de instagrapi
-    3️⃣ Login tradicional con device settings estables
+    3️⃣ Login tradicional con device settings fijos
     """
     cookies_path = cookies_file(username)
     session_path = session_file(username)
 
-    # --- Crear cliente limpio cada vez ---
+    # --- Crear nuevo cliente limpio ---
     client = Client()
 
-    # 1️⃣ Intentar restaurar sesión desde cookies reales
+    # ------------------------------
+    # 1️⃣ Intentar restaurar cookies
+    # ------------------------------
     if os.path.exists(cookies_path):
         try:
             with open(cookies_path, "r") as f:
@@ -42,9 +45,11 @@ def login(username, password):
             print(f"✅ Sesión restaurada desde cookies ({cookies_path})")
             return client
         except Exception as e:
-            print(f"⚠️ Cookies inválidas ({e}). Intentando siguiente método...")
+            print(f"⚠️ Cookies inválidas ({e}). Probando sesión JSON...")
 
-    # 2️⃣ Intentar restaurar sesión desde JSON
+    # ------------------------------
+    # 2️⃣ Intentar restaurar sesión JSON
+    # ------------------------------
     if os.path.exists(session_path):
         try:
             client.load_settings(session_path)
@@ -52,64 +57,76 @@ def login(username, password):
             print(f"✅ Sesión válida restaurada desde {session_path}")
             return client
         except Exception as e:
-            print(f"⚠️ Sesión inválida ({e}). Eliminando archivo y regenerando...")
+            print(f"⚠️ Sesión inválida ({e}). Eliminando archivo...")
             try:
                 os.remove(session_path)
             except:
                 pass
             time.sleep(2)
-            client = Client()
 
-    # 3️⃣ Login tradicional si no hay sesión válida
+    # ------------------------------
+    # 3️⃣ Login limpio (con device fijo)
+    # ------------------------------
+    print("🔁 Creando nueva sesión con device fijo...")
+
+    fixed_device = {
+        "manufacturer": "Samsung",
+        "device": "SM-G973F",
+        "model": "SM-G973F",
+        "android_version": 28,
+        "android_release": "9.0",
+        "dpi": "480dpi",
+        "resolution": "1080x1920",
+        "cpu": "qcom",
+        "version_code": "314665256",
+        "app_version": "269.0.0.18.75",
+    }
+
+    fixed_ids = {
+        "uuid": "d9f3c0d1-1d2f-4f4b-86b3-ae1b91a6a001",
+        "phone_id": "bd0e9f01-6a1c-4a4a-8a4f-ffd733002888",
+        "device_id": "android-38c9b4e47f92a123",
+        "adid": "17d45662-4a9f-4a3a-bb9a-2b38b77a4413",
+        "android_device_id": "25bd27bb-a69a-4b8a-8811-e391fb07a5fa",
+    }
+
+    client.set_settings({
+        "uuids": fixed_ids,
+        "device_settings": fixed_device,
+    })
+
+    # 🔐 Login real
+    client.login(username, password)
+    print("✅ Login exitoso")
+
+    # ⚡ Fuerza peticiones que generan actividad
     try:
-        print("🔁 Creando nueva sesión con device fijo...")
-        client.login(username, password)
+        client.get_timeline_feed()
+        client.user_info_by_username(username)
+    except Exception:
+        pass
 
-        # ⚙️ Device Settings fijos (para evitar "nuevo dispositivo")
-        settings = client.get_settings() or {}
-        ds = settings.get("device_settings", {})
+    # ------------------------------
+    # 💾 Guardar sesión + cookies simuladas
+    # ------------------------------
+    settings = client.get_settings()
+    auth = settings.get("authorization_data", {})
 
-        ds.setdefault("manufacturer", "Samsung")
-        ds.setdefault("device", "SM-G973F")
-        ds.setdefault("model", "SM-G973F")
-        ds.setdefault("android_version", 28)
-        ds.setdefault("android_release", "9")
+    # Simular cookies desde authorization_data
+    cookies = {
+        "sessionid": auth.get("sessionid"),
+        "ds_user_id": auth.get("ds_user_id"),
+    }
 
-        settings.setdefault("uuid", settings.get("uuid", str(uuid.uuid4())))
-        ds.setdefault("device_id", ds.get("device_id", str(uuid.uuid4())))
-        ds.setdefault("phone_id", ds.get("phone_id", str(uuid.uuid4())))
-        ds.setdefault("adid", ds.get("adid", str(uuid.uuid4())))
-        ds.setdefault("android_device_id", ds.get("android_device_id", str(uuid.uuid4())))
+    # Guardar archivos
+    client.dump_settings(session_path)
+    with open(cookies_path, "w") as f:
+        json.dump(cookies, f)
 
-        settings["device_settings"] = ds
-        client.set_settings(settings)
+    print(f"💾 Sesión guardada en {session_path}")
+    print(f"🍪 Cookies simuladas guardadas en {cookies_path}: {len(cookies)} claves")
 
-        # 💾 Guardar sesión y cookies
-        client.dump_settings(session_path)
-        cookies = client.get_settings().get("cookies")
-        if cookies:
-            with open(cookies_path, "w") as f:
-                json.dump(cookies, f)
-            print(f"🍪 Cookies guardadas en {cookies_path}")
-
-        print(f"💾 Nueva sesión guardada en {session_path}")
-        return client
-
-    except Exception as e:
-        if "challenge_required" in str(e):
-            print("⚠️ Instagram requiere verificación (challenge).")
-            try:
-                challenge = client.challenge_resolve()
-                if not challenge:
-                    code = input("Introduce el código recibido por email/SMS: ")
-                    client.challenge_code_handler(code)
-                    client.dump_settings(session_path)
-                    print("✅ Challenge completado y sesión guardada.")
-                    return client
-            except Exception as e2:
-                raise Exception(f"Challenge no completado: {e2}")
-        else:
-            raise Exception(f"❌ Error al iniciar sesión: {e}")
+    return client
 
 
 # ------------------------------
@@ -220,13 +237,22 @@ def get_likers(client, media_pk, batch_size=10, offset=0):
                 "language": lang,
             })
         except Exception as e:
-            if "Not authorized" in str(e):
+            err_text = str(e).lower()
+
+            if "challenge_required" in err_text or "login_required" in err_text:
+                print("🔐 Conecta a Instagram de nuevo para confirmar tu identidad y continuar.")
+                # Detenemos el proceso si la sesión ya no es válida
+                raise Exception("🔐 Conecta a Instagram de nuevo para confirmar tu identidad y continuar.")
+
+            elif "not authorized" in err_text:
                 print(f"🚫 No autorizado a ver el perfil de {u.username}.")
                 continue
-            print(f"⚠️ Error con usuario {u.username}: {e}")
-            continue
 
-        time.sleep(1)
+            else:
+                print(f"⚠️ Error con usuario {u.username}: {e}")
+                continue
+
+        time.sleep(random.uniform(2, 4))
 
     has_more = offset + batch_size < len(likers)
     return {

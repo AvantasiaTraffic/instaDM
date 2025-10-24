@@ -13,7 +13,13 @@ from ai import generate_dm
 # --- CONFIGURACIÓN INICIAL ---
 st.set_page_config(page_title="🤖 InstaDM", page_icon="💬", layout="wide")
 st.title("🤖 InstaDM")
-st.info("ℹ️ Los mensajes a cuentas privadas no se envían. Solo se procesan cuentas públicas contactables.")
+st.info(
+    "ℹ️ Los mensajes a cuentas privadas no se envían. Solo se procesan cuentas públicas contactables.\n\n"
+    "🔒 Al conectarte desde esta herramienta, Instagram puede cerrar tu sesión en la app oficial "
+    "o pedir que confirmes tu identidad. Esto ocurre porque detecta un inicio de sesión desde otro dispositivo. "
+    "No te preocupes, es totalmente seguro: solo entra en tu aplicación de Instagram, confirma que fuiste tú "
+    "y podrás volver aquí sin perder tu progreso."
+)
 
 load_dotenv()
 IG_USERNAME = os.getenv("IG_USERNAME")
@@ -133,6 +139,9 @@ if st.session_state["cl"]:
                     progress_bar.progress(progress)
                     progress_text.text(f"Procesando usuario {i + 1}/{total}...")
 
+                    # 💤 Espera aleatoria para no parecer bot
+                    time.sleep(random.uniform(1.5, 3.5))
+
                 progress_bar.progress(100)
                 progress_text.text("✅ Lote completado")
 
@@ -149,10 +158,15 @@ if st.session_state["cl"]:
                     st.success("✅ Todos los likes de este post han sido procesados.")
 
             except Exception as e:
-                if "login_required" in str(e).lower():
-                    st.warning("🔐 Sesión expirada. Pulsa el botón para iniciar sesión de nuevo.")
+                error_text = str(e).lower()
+                # 🚨 Caso 1: challenge o login
+                if "conecta a instagram de nuevo" in error_text or "login_required" in error_text or "challenge_required" in error_text:
+                    st.warning("🔐 Conecta a Instagram de nuevo para confirmar tu identidad. "
+                               "Abre tu aplicación de Instagram, aprueba el acceso, y vuelve aquí para continuar.")
                     st.session_state["cl"] = None
-                    st.rerun()  # 🔁 Redibuja la app mostrando el botón
+                    time.sleep(2)
+                    st.rerun()  # 🔁 Vuelve a dibujar la app mostrando el botón de inicio
+                # 🚨 Caso 2: otros errores normales
                 else:
                     st.error(f"❌ Error al obtener información: {e}")
 
@@ -241,20 +255,33 @@ if st.session_state["cl"]:
                             break
 
                         except ClientError as e:
-                            if "Not authorized" in str(e):
+                            err_text = str(e).lower()
+                            if "not authorized" in err_text:
                                 st.write(f"🚫 No autorizado para enviar mensaje a {username}.")
-                            elif "login_required" in str(e):
-                                st.warning("🔐 Sesión expirada. Reautenticando antes de continuar...")
-                                st.session_state["cl"] = ensure_login(st.session_state["cl"], IG_USERNAME, IG_PASSWORD)
+                                continue
+                            elif "login_required" in err_text or "challenge_required" in err_text:
+                                st.warning(
+                                    "🔐 Conecta a Instagram de nuevo para confirmar tu identidad. "
+                                    "Abre la app oficial, aprueba el acceso, y vuelve aquí para continuar."
+                                )
+                                st.session_state["cl"] = None
+                                time.sleep(2)
+                                st.rerun()
                                 continue
                             else:
                                 st.write(f"⚠️ Error con {username}: {e}")
-                            continue
+                                continue
 
                         except Exception as e:
-                            if "login_required" in str(e):
-                                st.warning("🔐 Sesión expirada. Reautenticando antes de continuar...")
-                                st.session_state["cl"] = ensure_login(st.session_state["cl"], IG_USERNAME, IG_PASSWORD)
+                            err_text = str(e).lower()
+                            if "login_required" in err_text or "challenge_required" in err_text:
+                                st.warning(
+                                    "🔐 Conecta a Instagram de nuevo para confirmar tu identidad. "
+                                    "Abre tu aplicación de Instagram, aprueba el acceso, y vuelve aquí para continuar."
+                                )
+                                st.session_state["cl"] = None
+                                time.sleep(2)
+                                st.rerun()
                                 continue
                             st.write(f"⚠️ Error inesperado con {username}: {e}")
                             continue
