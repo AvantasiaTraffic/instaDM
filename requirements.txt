@@ -1,0 +1,6 @@
+instagrapi==1.19.7
+pandas
+streamlit
+python-dotenv
+openai
+langdetect==1.0.9
