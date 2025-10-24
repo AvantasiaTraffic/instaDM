@@ -18,7 +18,14 @@ st.info(
     "🔒 Al conectarte desde esta herramienta, Instagram puede cerrar tu sesión en la app oficial "
     "o pedir que confirmes tu identidad. Esto ocurre porque detecta un inicio de sesión desde otro dispositivo. "
     "No te preocupes, es totalmente seguro: solo entra en tu aplicación de Instagram, confirma que fuiste tú "
-    "y podrás volver aquí sin perder tu progreso."
+    "y podrás volver aquí sin perder tu progreso.\n\n"
+    "⚙️ **Recomendaciones para mantener tu cuenta segura:**\n"
+    "• Espera entre **3 y 6 segundos** entre acciones (ya está automatizado por la app).\n"
+    "• No proceses más de **100 interacciones (likes o mensajes)** por hora.\n"
+    "• Evita ejecutar varios procesos seguidos sin pausas: deja pasar **al menos 10–15 minutos** entre lotes grandes.\n"
+    "• Si Instagram muestra una alerta o te desconecta, **entra en la app oficial**, confirma que fuiste tú y vuelve a esta herramienta.\n\n"
+    "⏳ Estos límites no son errores: son medidas para proteger tu cuenta y evitar que Instagram detecte una actividad automatizada. "
+    "El ritmo lento garantiza que tus acciones sean naturales y seguras."
 )
 
 load_dotenv()
