@@ -24,7 +24,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS post_progress(
             url TEXT PRIMARY KEY,
             offset INTEGER DEFAULT 0,
-            total_likes INTEGER DEFAULT 0
+            total_likes INTEGER DEFAULT 0,
+            last_send_ts INTEGER DEFAULT 0
         )
     """)
 
@@ -36,6 +37,14 @@ def init_db():
         cur.execute("ALTER TABLE post_progress ADD COLUMN total_likes INTEGER DEFAULT 0")
         conn.commit()
         print("✅ Columna 'total_likes' añadida correctamente.")
+
+    # 🔍 Verifica si la columna last_send_ts existe
+    cur.execute("PRAGMA table_info(post_progress)")
+    columns = [row[1] for row in cur.fetchall()]
+    if "last_send_ts" not in columns:
+        print("⚙️ Agregando columna 'last_send_ts'...")
+        cur.execute("ALTER TABLE post_progress ADD COLUMN last_send_ts INTEGER DEFAULT 0")
+        conn.commit()
 
     conn.commit()
     conn.close()
@@ -104,5 +113,25 @@ def save_post_progress(url, offset, total_likes):
         VALUES (?, ?, ?)
         ON CONFLICT(url) DO UPDATE SET offset=excluded.offset, total_likes=excluded.total_likes
     """, (url, offset, total_likes))
+    conn.commit()
+    conn.close()
+
+def get_last_send_ts(url):
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("SELECT last_send_ts FROM post_progress WHERE url=?", (url,))
+    row = cur.fetchone()
+    conn.close()
+    return row[0] if row else 0
+
+def update_last_send_ts(url):
+    conn = db()
+    cur = conn.cursor()
+    ts = int(time.time())
+    cur.execute("""
+        INSERT INTO post_progress (url, last_send_ts)
+        VALUES (?, ?)
+        ON CONFLICT(url) DO UPDATE SET last_send_ts=excluded.last_send_ts
+    """, (url, ts))
     conn.commit()
     conn.close()

@@ -115,7 +115,7 @@ if st.session_state["cl"]:
     st.caption(
         "📊 *Instagram impone límites de visibilidad en los likes:*\n\n"
         "• En publicaciones **de otras cuentas**, solo se pueden obtener aproximadamente **100–120 likes visibles**.\n"
-        "• Si el post **es de tu propia cuenta**, podrás ver hasta **5.000 likes** o más.\n\n"
+        "• Si el post **es de tu propia cuenta**, podrás ver más **likes**.\n\n"
         "💡 *Este límite es propio de Instagram, no de la herramienta.*"
     )
 
@@ -238,7 +238,7 @@ if st.session_state["cl"]:
 
         # --- ENVÍO DE MENSAJES ---
         st.subheader("📨 Enviar mensajes automáticos con IA")
-        only_public = st.checkbox("Enviar solo a cuentas públicas", value=True)
+        only_public = True
 
         if st.button("🤖 Generar mensajes con IA"):
             with st.spinner("Generando mensajes personalizados..."):
@@ -283,67 +283,88 @@ if st.session_state["cl"]:
                         st.text_area(f"Mensaje para {msg['username']}", msg["message"], height=100, key=f"preview_{msg['username']}")
 
         # --- ENVIAR MENSAJES ---
+        from datetime import datetime
+        from db import get_last_send_ts, update_last_send_ts
+
         if "generated_messages" in st.session_state and st.session_state["generated_messages"]:
-            if st.button("🚀 Enviar todos los mensajes"):
-                with st.spinner("Enviando mensajes..."):
-                    sent = 0
-                    total = len(st.session_state["generated_messages"])
-                    progress = st.progress(0)
+            st.subheader("🚀 Enviar todos los mensajes")
 
-                    for i, msg in enumerate(st.session_state["generated_messages"]):
-                        username = msg["username"]
-                        user_id = msg["pk"]
+            # 🕒 Control de tiempo (cooldown de 10 minutos)
+            cooldown_minutes = 10
+            cooldown_key = "global_send"  # puedes usar "global_send" o un identificador por post
+            last_ts = get_last_send_ts(cooldown_key)
+            now = int(time.time())
+            remaining = last_ts + cooldown_minutes * 60 - now
 
-                        try:
-                            # 🧠 Verifica sesión activa antes de cada envío
-                            st.session_state["cl"] = ensure_login(st.session_state["cl"], IG_USERNAME, IG_PASSWORD)
+            if remaining > 0:
+                mins = remaining // 60
+                secs = remaining % 60
+                st.warning(f"⏳ Espera {mins} min {secs} s antes de volver a enviar mensajes.")
+            else:
+                if st.button("🚀 Enviar todos los mensajes"):
+                    with st.spinner("Enviando mensajes..."):
+                        sent = 0
+                        total = len(st.session_state["generated_messages"])
+                        progress = st.progress(0)
 
-                            # 🚀 Envía el mensaje
-                            st.session_state["cl"].direct_send(msg["message"], user_ids=[user_id])
-                            mark_contacted(username)
-                            sent += 1
-                            st.write(f"✅ Mensaje enviado a **{username}** (ID: {user_id})")
+                        for i, msg in enumerate(st.session_state["generated_messages"]):
+                            username = msg["username"]
+                            user_id = msg["pk"]
 
-                        except RateLimitError:
-                            st.error("⚠️ Límite de Instagram alcanzado. Espera antes de continuar.")
-                            break
+                            try:
+                                # 🧠 Verifica sesión activa antes de cada envío
+                                st.session_state["cl"] = ensure_login(st.session_state["cl"], IG_USERNAME, IG_PASSWORD)
 
-                        except ClientError as e:
-                            err_text = str(e).lower()
-                            if "not authorized" in err_text:
-                                st.write(f"🚫 No autorizado para enviar mensaje a {username}.")
+                                # 🚀 Envía el mensaje
+                                st.session_state["cl"].direct_send(msg["message"], user_ids=[user_id])
+                                mark_contacted(username)
+                                sent += 1
+                                st.write(f"✅ Mensaje enviado a **{username}** (ID: {user_id})")
+
+                            except RateLimitError:
+                                st.error("⚠️ Límite de Instagram alcanzado. Espera antes de continuar.")
+                                break
+
+                            except ClientError as e:
+                                err_text = str(e).lower()
+                                if "not authorized" in err_text:
+                                    st.write(f"🚫 No autorizado para enviar mensaje a {username}.")
+                                    continue
+                                elif "login_required" in err_text or "challenge_required" in err_text:
+                                    st.warning(
+                                        "🔐 Conecta a Instagram de nuevo para confirmar tu identidad. "
+                                        "Abre la app oficial, aprueba el acceso, y vuelve aquí para continuar."
+                                    )
+                                    st.session_state["cl"] = None
+                                    time.sleep(3)
+                                    st.rerun()
+                                    continue
+                                else:
+                                    st.write(f"⚠️ Error con {username}: {e}")
+                                    continue
+
+                            except Exception as e:
+                                err_text = str(e).lower()
+                                if "login_required" in err_text or "challenge_required" in err_text:
+                                    st.warning(
+                                        "🔐 Conecta a Instagram de nuevo para confirmar tu identidad. "
+                                        "Abre tu aplicación de Instagram, aprueba el acceso, y vuelve aquí para continuar."
+                                    )
+                                    st.session_state["cl"] = None
+                                    time.sleep(3)
+                                    st.rerun()
+                                    continue
+                                st.write(f"⚠️ Error inesperado con {username}: {e}")
                                 continue
-                            elif "login_required" in err_text or "challenge_required" in err_text:
-                                st.warning(
-                                    "🔐 Conecta a Instagram de nuevo para confirmar tu identidad. "
-                                    "Abre la app oficial, aprueba el acceso, y vuelve aquí para continuar."
-                                )
-                                st.session_state["cl"] = None
-                                time.sleep(3)
-                                st.rerun()
-                                continue
-                            else:
-                                st.write(f"⚠️ Error con {username}: {e}")
-                                continue
 
-                        except Exception as e:
-                            err_text = str(e).lower()
-                            if "login_required" in err_text or "challenge_required" in err_text:
-                                st.warning(
-                                    "🔐 Conecta a Instagram de nuevo para confirmar tu identidad. "
-                                    "Abre tu aplicación de Instagram, aprueba el acceso, y vuelve aquí para continuar."
-                                )
-                                st.session_state["cl"] = None
-                                time.sleep(3)
-                                st.rerun()
-                                continue
-                            st.write(f"⚠️ Error inesperado con {username}: {e}")
-                            continue
+                            # 📊 Actualiza la barra de progreso
+                            progress.progress(int((i + 1) / total * 100))
+                            time.sleep(random.uniform(6, 9))
 
-                        # 📊 Actualiza la barra de progreso
-                        progress.progress(int((i + 1) / total * 100))
-                        time.sleep(random.uniform(6, 9))
+                        st.success(f"📨 Se enviaron {sent} mensajes correctamente.")
+                        st.session_state.pop("generated_messages", None)
 
-                    st.success(f"📨 Se enviaron {sent} mensajes correctamente.")
-                    st.session_state.pop("generated_messages", None)
+                        # 💾 Guarda timestamp del último envío (persistente)
+                        update_last_send_ts(cooldown_key)
+                        st.info(f"🕒 Envíos bloqueados por {cooldown_minutes} minutos.")
 
