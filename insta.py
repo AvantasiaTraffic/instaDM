@@ -197,8 +197,12 @@ def extract_media_pk(client, url: str):
 def get_likers(client, media_pk, batch_size=10, offset=0):
     """
     Obtiene 'batch_size' usuarios que dieron like, desde 'offset'.
-    Filtra privados y detecta idioma.
+    Compatible con instagrapi >=2.1.1 (sin 'amount' ni 'max_id').
+    Filtra privados, detecta idioma y muestra cuántos likes son visibles.
     """
+    import random, time
+    from langdetect import detect
+
     try:
         media_info = client.media_info(media_pk)
         caption_text = getattr(media_info.caption, "text", "")
@@ -207,11 +211,23 @@ def get_likers(client, media_pk, batch_size=10, offset=0):
     except Exception:
         caption_text, owner_username, like_count = "", "unknown", 0
 
+    likers = []
     try:
+        # 🔍 Solo una llamada — Instagram devuelve todos los visibles
         likers = client.media_likers(media_pk)
+        visible_count = len(likers)
+        print(f"📊 Instagram devuelve {visible_count} likes visibles (de {like_count} totales reportados).")
     except Exception as e:
+        print(f"⚠️ Error al obtener likers: {e}")
         raise Exception(f"Error al obtener likers: {e}")
 
+    # Si Instagram devuelve muy pocos, detecta que hay límite de visibilidad
+    limited = len(likers) < like_count and len(likers) < 150
+    if limited:
+        print(f"⚠️ Solo se pudieron obtener {len(likers)} de {like_count} likes totales "
+              f"(Instagram limita la visibilidad para cuentas no propietarias).")
+
+    # Seleccionar el lote actual
     likers_batch = likers[offset : offset + batch_size]
     data = []
 
@@ -238,28 +254,39 @@ def get_likers(client, media_pk, batch_size=10, offset=0):
             })
         except Exception as e:
             err_text = str(e).lower()
-
             if "challenge_required" in err_text or "login_required" in err_text:
                 print("🔐 Conecta a Instagram de nuevo para confirmar tu identidad y continuar.")
-                # Detenemos el proceso si la sesión ya no es válida
                 raise Exception("🔐 Conecta a Instagram de nuevo para confirmar tu identidad y continuar.")
-
             elif "not authorized" in err_text:
                 print(f"🚫 No autorizado a ver el perfil de {u.username}.")
                 continue
-
             else:
                 print(f"⚠️ Error con usuario {u.username}: {e}")
                 continue
 
+        # ⏱️ Pausa humana entre usuarios
         time.sleep(random.uniform(5, 8))
 
-    has_more = offset + batch_size < len(likers)
+    # ✅ Calcular desplazamiento después de procesar todo el lote
+    total_likes = like_count if like_count else len(likers)
+    next_offset = offset + batch_size
+
+    if next_offset > total_likes:
+        next_offset = total_likes  # no pasar del total visible
+
+    has_more = next_offset < total_likes
+
+    print(
+        f"🧩 [DEBUG] Cálculo offset → offset={offset}, batch_size={batch_size}, next_offset={next_offset}, total_likes={total_likes}")
+
     return {
         "media_caption": caption_text,
         "media_owner": owner_username,
-        "media_like_count": like_count,
+        "media_like_count": total_likes,
         "likers": data,
         "has_more": has_more,
-        "next_offset": offset + batch_size if has_more else None
+        "next_offset": next_offset,
+        "visible_count": len(likers)
     }
+
+

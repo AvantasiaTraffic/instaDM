@@ -16,16 +16,15 @@ st.title("🤖 InstaDM")
 st.info(
     "ℹ️ Los mensajes a cuentas privadas no se envían. Solo se procesan cuentas públicas contactables.\n\n"
     "🔒 Al conectarte desde esta herramienta, Instagram puede cerrar tu sesión en la app oficial "
-    "o pedir que confirmes tu identidad. Esto ocurre porque detecta un inicio de sesión desde otro dispositivo. "
-    "No te preocupes, es totalmente seguro: solo entra en tu aplicación de Instagram, confirma que fuiste tú "
-    "y podrás volver aquí sin perder tu progreso.\n\n"
-    "⚙️ **Recomendaciones para mantener tu cuenta segura:**\n"
-    "• Espera entre **3 y 6 segundos** entre acciones (ya está automatizado por la app).\n"
-    "• No proceses más de **100 interacciones (likes o mensajes)** por hora.\n"
-    "• Evita ejecutar varios procesos seguidos sin pausas: deja pasar **al menos 10–15 minutos** entre lotes grandes.\n"
-    "• Si Instagram muestra una alerta o te desconecta, **entra en la app oficial**, confirma que fuiste tú y vuelve a esta herramienta.\n\n"
-    "⏳ Estos límites no son errores: son medidas para proteger tu cuenta y evitar que Instagram detecte una actividad automatizada. "
-    "El ritmo lento garantiza que tus acciones sean naturales y seguras."
+    "o pedir que confirmes tu identidad. Esto ocurre porque detecta un nuevo inicio de sesión desde otro dispositivo. "
+    "No te preocupes: es totalmente seguro y basta con confirmar que fuiste tú.\n\n"
+    "⚙️ **Recomendaciones para mantener tu cuenta segura:**\n\n"
+    "• Espera entre **3 y 6 segundos** entre acciones (ya automatizado por la aplicación).\n\n"
+    "• No realices más de **100 interacciones (likes o mensajes)** por hora.\n\n"
+    "• Deja pasar **10–15 minutos entre lotes grandes** para evitar sobrecarga o bloqueos temporales.\n\n"
+    "• Si aparece una alerta o la sesión se cierra, simplemente **entra en tu app oficial**, confirma que fuiste tú y regresa aquí.\n\n"
+    "⏳ Estos tiempos y pausas están pensados para que tu actividad parezca natural ante Instagram "
+    "y evitar que tu cuenta sea marcada por uso automatizado."
 )
 
 load_dotenv()
@@ -113,6 +112,13 @@ if st.session_state["cl"]:
     st.subheader("📸 Obtener Likes de una publicación")
     url = st.text_input("Introduce la URL del post de Instagram:")
 
+    st.caption(
+        "📊 *Instagram impone límites de visibilidad en los likes:*\n\n"
+        "• En publicaciones **de otras cuentas**, solo se pueden obtener aproximadamente **100–120 likes visibles**.\n"
+        "• Si el post **es de tu propia cuenta**, podrás ver hasta **5.000 likes** o más.\n\n"
+        "💡 *Este límite es propio de Instagram, no de la herramienta.*"
+    )
+
     if st.button("📊 Sacar información de likes"):
         if not url:
             st.warning("⚠️ Debes introducir la URL del post.")
@@ -121,8 +127,26 @@ if st.session_state["cl"]:
         else:
             try:
                 # 🧠 Cargar progreso guardado de ese post
-                current_offset = get_post_progress(url)
-                st.info(f"📡 Obteniendo likes desde {current_offset} hasta {current_offset + num_likes}...")
+                current_offset, total_saved_likes = get_post_progress(url)
+
+                # Obtener información del post para conocer el total real de likes
+                media_pk = extract_media_pk(st.session_state["cl"], url)
+                st.session_state["cl"] = ensure_login(st.session_state["cl"], IG_USERNAME, IG_PASSWORD)
+
+                try:
+                    media_info = st.session_state["cl"].media_info(media_pk)
+                    total_likes = getattr(media_info, "like_count", 0)
+                except Exception:
+                    total_likes = 0
+
+                # Evitar reiniciar si ya llegaste al final del post
+                if total_likes > 0 and current_offset >= total_likes:
+                    st.warning("✅ Ya alcanzaste el límite máximo de likes visibles para este post.")
+                    st.stop()
+
+                start_offset = current_offset
+                end_offset = start_offset + num_likes
+                st.info(f"📡 Obteniendo likes desde {start_offset} hasta {end_offset}...")
 
                 media_pk = extract_media_pk(st.session_state["cl"], url)
                 st.session_state["cl"] = ensure_login(st.session_state["cl"], IG_USERNAME, IG_PASSWORD)
@@ -156,13 +180,36 @@ if st.session_state["cl"]:
                 st.session_state["likers_data"].extend(likers)
                 st.dataframe(df, width="stretch")
 
-                # 💾 Guardar progreso nuevo
-                if result["has_more"]:
-                    save_post_progress(url, result["next_offset"])
-                    st.info(f"Aún quedan más usuarios ({result['next_offset']} / {result['media_like_count']})")
+                # 💾 Guardar progreso nuevo (solo si hay datos)
+                if len(likers) > 0:
+                    # Si todavía hay más likes disponibles
+                    if result["has_more"] and result["next_offset"] is not None:
+                        new_offset = result["next_offset"]
+                        st.info(f"📈 Progreso guardado: {new_offset} / {result['media_like_count']}")
+                    else:
+                        # Llegamos al final → guardamos el total real para marcar completado
+                        new_offset = result.get("media_like_count", current_offset)
+                        st.success("✅ Todos los likes de este post han sido procesados (límite alcanzado).")
+
+                    # ⚠️ Guardar progreso solo si cambia realmente
+                    if new_offset > current_offset:
+                        save_post_progress(url, new_offset, total_likes)
+                    else:
+                        st.info("ℹ️ No se actualizó el progreso porque ya se había alcanzado el límite.")
+
+                    st.session_state["last_progress"] = {
+                        "url": url,
+                        "offset": new_offset,
+                        "count": len(likers),
+                        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+
                 else:
-                    save_post_progress(url, 0)
-                    st.success("✅ Todos los likes de este post han sido procesados.")
+                    # Si el lote no devuelve nada nuevo
+                    st.warning(
+                        "⚠️ No se encontraron nuevos usuarios en este lote. "
+                        "Es posible que ya hayas alcanzado el límite de likes visibles para este post."
+                    )
 
             except Exception as e:
                 error_text = str(e).lower()
@@ -300,27 +347,3 @@ if st.session_state["cl"]:
                     st.success(f"📨 Se enviaron {sent} mensajes correctamente.")
                     st.session_state.pop("generated_messages", None)
 
-        # --- VERIFICAR RESPUESTAS ---
-        if st.button("📥 Verificar respuestas"):
-            with st.spinner("Revisando mensajes recibidos..."):
-                try:
-                    threads = st.session_state["cl"].direct_threads(amount=10)
-                    if not threads:
-                        st.info("ℹ️ No se encontraron mensajes recientes.")
-                    else:
-                        for thread in threads:
-                            # Validar que existan usuarios y mensajes
-                            if not thread.users or not thread.messages:
-                                continue
-
-                            user = thread.users[0].username if thread.users else "Desconocido"
-                            last_msg = (
-                                thread.messages[0].text
-                                if thread.messages and thread.messages[0].text
-                                else "(Sin contenido)"
-                            )
-
-                            st.write(f"💬 **{user}**: {last_msg}")
-
-                except Exception as e:
-                    st.error(f"❌ Error al verificar respuestas: {e}")
