@@ -7,7 +7,7 @@ import sqlite3
 from dotenv import load_dotenv
 from instagrapi.exceptions import ClientError, RateLimitError
 from insta import login, extract_media_pk, get_likers, ensure_login
-from db import init_db, save_likers, get_pending, mark_contacted, db, get_post_progress, save_post_progress
+from db import init_db, save_likers, get_pending, mark_contacted, db, get_post_progress, save_post_progress, get_ai_templates, save_ai_templates
 from ai import generate_dm
 
 # --- CONFIGURACIÓN INICIAL ---
@@ -60,6 +60,39 @@ with st.sidebar:
     st.header("⚙️ Configuración InstaDM")
     num_likes = st.number_input("Número de likes por lote:", min_value=1, max_value=100, value=10, step=1)
     num_messages = st.number_input("Número máximo de mensajes a enviar:", min_value=1, max_value=100, value=10, step=1)
+
+    # --- NUEVO CAMPO DE PLANTILLA PERSONALIZADA ---
+    st.subheader("🧠 Plantilla de mensaje IA")
+    stored_es, stored_en = get_ai_templates()
+
+    default_es = """Eres una autora amable que quiere conectar con nuevos lectores.
+    Genera un mensaje breve (máx. 250 caracteres) dirigido a {name},
+    invitándole a leer los primeros capítulos gratis de un thriller powermetal titulado 'Sinfonía de la Oscuridad'.
+    Incluye el enlace: https://www.amazon.es/dp/B0DV5NZ9RX.
+    Usa un tono cercano y natural en español.
+    """
+
+    default_en = """You are a friendly author who wants to connect with new readers.
+    Write a short message (max 250 characters) addressed to {name},
+    inviting them to read the first free chapters of a powermetal thriller titled 'Darkness Symphony'.
+    Include the link: https://www.amazon.com/dp/B0DYSNXD4B.
+    Use a warm, natural tone in English.
+    """
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        custom_es = st.text_area("🇪🇸 Plantilla en español:", value=stored_es or default_es, height=180)
+    with col2:
+        custom_en = st.text_area("🇺🇸 Template in English:", value=stored_en or default_en, height=180)
+
+    if (custom_es != stored_es) or (custom_en != stored_en):
+        save_ai_templates(custom_es, custom_en)
+        st.success("💾 Plantillas actualizadas y guardadas en base de datos.")
+
+    # Guardar en sesión
+    st.session_state["custom_template_es"] = custom_es
+    st.session_state["custom_template_en"] = custom_en
 
     st.divider()
     st.subheader("👁️ Visualización de datos")
@@ -260,7 +293,12 @@ if st.session_state["cl"]:
                             conn.close()
                             lang = row[0] if row and row[0] else "es"
 
-                            message = generate_dm(full_name or username, lang)
+                            message = generate_dm(
+                                full_name or username,
+                                lang,
+                                st.session_state["custom_template_es"],
+                                st.session_state["custom_template_en"]
+                            )
                             generated_messages.append({
                                 "username": username,
                                 "full_name": full_name,

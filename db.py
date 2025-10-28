@@ -25,7 +25,10 @@ def init_db():
             url TEXT PRIMARY KEY,
             offset INTEGER DEFAULT 0,
             total_likes INTEGER DEFAULT 0,
-            last_send_ts INTEGER DEFAULT 0
+            last_send_ts INTEGER DEFAULT 0,
+            ai_template  TEXT,
+            ai_template_es  TEXT,
+            ai_template_en TEXT
         )
     """)
 
@@ -44,6 +47,24 @@ def init_db():
     if "last_send_ts" not in columns:
         print("⚙️ Agregando columna 'last_send_ts'...")
         cur.execute("ALTER TABLE post_progress ADD COLUMN last_send_ts INTEGER DEFAULT 0")
+        conn.commit()
+
+    # 🔍 Verifica si la columna ai_template existe
+    cur.execute("PRAGMA table_info(post_progress)")
+    columns = [row[1] for row in cur.fetchall()]
+    if "ai_template" not in columns:
+        print("⚙️ Agregando columna 'ai_template'...")
+        cur.execute("ALTER TABLE post_progress ADD COLUMN ai_template TEXT DEFAULT ''")
+        conn.commit()
+
+    if "ai_template_es" not in columns:
+        print("⚙️ Agregando columna 'ai_template_es'...")
+        cur.execute("ALTER TABLE post_progress ADD COLUMN ai_template_es TEXT DEFAULT ''")
+        conn.commit()
+
+    if "ai_template_en" not in columns:
+        print("⚙️ Agregando columna 'ai_template_en'...")
+        cur.execute("ALTER TABLE post_progress ADD COLUMN ai_template_en TEXT DEFAULT ''")
         conn.commit()
 
     conn.commit()
@@ -133,5 +154,28 @@ def update_last_send_ts(url):
         VALUES (?, ?)
         ON CONFLICT(url) DO UPDATE SET last_send_ts=excluded.last_send_ts
     """, (url, ts))
+    conn.commit()
+    conn.close()
+
+def get_ai_templates():
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("SELECT ai_template_es, ai_template_en FROM post_progress WHERE url='global_config'")
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return "", ""
+    return row[0] or "", row[1] or ""
+
+def save_ai_templates(template_es, template_en):
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO post_progress (url, ai_template_es, ai_template_en)
+        VALUES ('global_config', ?, ?)
+        ON CONFLICT(url) DO UPDATE
+        SET ai_template_es=excluded.ai_template_es,
+            ai_template_en=excluded.ai_template_en
+    """, (template_es, template_en))
     conn.commit()
     conn.close()
